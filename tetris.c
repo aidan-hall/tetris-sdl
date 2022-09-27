@@ -400,29 +400,54 @@ enum Move {
   MOVE_ANTICLOCKWISE,
 };
 
+struct Piece translated(struct Piece piece, int translation) {
+  struct Piece moved = piece;
+  moved.x += translation;
+  return moved;
+}
+
+void horizontal_kick(struct Piece *piece, struct Piece *moved,
+                     PlaySpace play_space) {
+  /* const int kick_dist = */
+  /*    (piece->tetromino == TET_I && piece->rotation == 1 && move ==
+   * MOVE_CLOCKWISE) ? 2 : 1; */
+  const int kick_dist = (piece->tetromino != TET_I) ? 1 : 2;
+  printf("kick dist: %d\n", kick_dist);
+  struct Piece kicked;
+  if (!collides(play_space, (kicked = translated(*moved, kick_dist)))) {
+    *piece = kicked;
+  } else if (!collides(play_space, (kicked = translated(*moved, -kick_dist)))) {
+    *piece = kicked;
+  }
+}
+
 void maybe_move(struct Piece *piece, enum Move move, PlaySpace play_space) {
-  struct Piece translated;
+  struct Piece moved;
   switch (move) {
   case MOVE_LEFT:
-    translated = *piece;
-    translated.x -= 1;
+    moved = translated(*piece, -1);
     break;
   case MOVE_RIGHT:
-    translated = *piece;
-    translated.x += 1;
+    moved = translated(*piece, 1);
     break;
   case MOVE_CLOCKWISE:
-    translated = rotated(piece, 1);
+    moved = rotated(piece, 1);
+    printf("Piece Rotation: %d\n", moved.rotation);
     break;
   case MOVE_ANTICLOCKWISE:
-    translated = rotated(piece, -1);
+    moved = rotated(piece, -1);
+    printf("Piece Rotation: %d\n", moved.rotation);
     break;
   case MOVE_NONE:
     return;
   }
 
-  if (!collides(play_space, translated)) {
-    *piece = translated;
+  if (!collides(play_space, moved)) {
+    *piece = moved;
+  } else if (move == MOVE_CLOCKWISE) {
+    horizontal_kick(piece, &moved, play_space);
+  } else if (move == MOVE_ANTICLOCKWISE) {
+    horizontal_kick(piece, &moved, play_space);
   }
 }
 
