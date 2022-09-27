@@ -379,8 +379,8 @@ bool collides(PlaySpace play_space, struct Piece piece) {
   return false;
 }
 
-struct Piece spawn_piece() {
-  struct Piece piece = {0, pick_piece(), 3, 0};
+struct Piece spawn_piece(enum Tetromino tetromino) {
+  struct Piece piece = {0, tetromino, 3, 0};
   return piece;
 }
 
@@ -426,6 +426,23 @@ void draw_piece(SDL_Renderer *renderer, SDL_Texture *tiles,
                piece.y * TILE_SIZE + PLAY_SPACE_Y);
 }
 
+void spawn_next_piece(struct Piece *piece, enum Tetromino *next_piece) {
+  *piece = spawn_piece(*next_piece);
+  *next_piece = pick_piece();
+}
+
+void place_piece(PlaySpace play_space, struct Piece piece) {
+  const PieceTiles *tiles = piece_tiles(piece);
+  for (int i = 0; i < 4; ++i) {
+    for (int j = 0; j < 4; ++j) {
+      const enum Tetromino tile = (*tiles)[i][j];
+      if (tile != TET_EMPTY) {
+        play_space[piece.y + i][piece.x + j] = tile;
+      }
+    }
+  }
+}
+
 int main() {
   srand(time(NULL));
 
@@ -433,7 +450,9 @@ int main() {
 
   SDL_Texture *tiles = load_texture(ctx, "art/small-tiles.png");
 
-  struct Piece piece = spawn_piece();
+  enum Tetromino next_piece = pick_piece();
+  struct Piece piece;
+  spawn_next_piece(&piece, &next_piece);
 
   PlaySpace play_space;
   for (int i = 0; i < PLAY_SPACE_HEIGHT; ++i) {
@@ -458,7 +477,7 @@ int main() {
         case SDL_KEYDOWN: {
           switch ((SDL_KeyCode)event.key.keysym.sym) {
           case SDLK_SPACE:
-            piece = spawn_piece();
+            spawn_next_piece(&piece, &next_piece);
             break;
           case SDLK_c:
             translated = rotated(&piece, 1);
@@ -490,6 +509,14 @@ int main() {
         maybe_move(&piece, translated, play_space);
     }
 
+    /* Dropping & Collision */
+    if (drop_cycle >= drop_cycle_speed) {
+      piece.y += 1;
+      drop_cycle = 0;
+    } else {
+      drop_cycle++;
+    }
+
     {
       /* Rendering */
       SDL_Renderer *r = ctx.renderer;
@@ -503,12 +530,11 @@ int main() {
       /* Game Elements */
       draw_tilemap(r, tiles, PLAY_SPACE_WIDTH, PLAY_SPACE_HEIGHT,
                    (enum Tetromino *)&play_space, PLAY_SPACE_X, PLAY_SPACE_Y);
+      /* Current piece */
       draw_piece(r, tiles, piece);
-      SDL_RenderPresent(r);
-    }
 
-    if (collides(play_space, piece)) {
-      puts("Collision!");
+      draw_piece(r, tiles, (struct Piece){0, next_piece, -5, 3});
+      SDL_RenderPresent(r);
     }
 
     uint64_t ending_tick = SDL_GetTicks64();
