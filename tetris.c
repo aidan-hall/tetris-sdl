@@ -337,6 +337,10 @@ const PieceTiles orientations[TET_NUM][4] = {
     },
 };
 
+const PieceTiles *piece_tiles(struct Piece piece) {
+  return &orientations[piece.tetromino][piece.rotation];
+}
+
 struct Piece spawn_piece() {
   struct Piece piece = {0, pick_piece(), 3, 0};
   return piece;
@@ -373,8 +377,7 @@ void draw_piece(SDL_Renderer *renderer, SDL_Texture *tiles,
                              TILE_SIZE};
 
   draw_tilemap(renderer, tiles, &texture_region, 4, 4,
-               (bool *)&orientations[piece.tetromino][piece.rotation],
-               piece.x * TILE_SIZE + PLAY_SPACE_X,
+               (bool *)piece_tiles(piece), piece.x * TILE_SIZE + PLAY_SPACE_X,
                piece.y * TILE_SIZE + PLAY_SPACE_Y);
 }
 
