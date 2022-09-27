@@ -1,0 +1,127 @@
+#+title: Tetris Design Document
+* Terminology
+Consistent use of terminology will be beneficial.
+** Tile/Block/Square
+These make up the play field and [[*Piece][pieces]].
+** Piece
+The falling thing that the player controls.  These are one-sided
+[[https://en.wikipedia.org/wiki/Polyomino][polyominoes]].  In Tetris, they are strictly tetrominoes.
+* TODO Overview Design [0%]
+** Copying 
+See https://tetris.com/play-tetris/, especially the "General Gameplay
+Info" in the "How to Play" menu:
+[[file:general-gameplay-info.png]]
+** Interaction 
+A series of [[https://en.wikipedia.org/wiki/Tetromino#One-sided_tetrominoes][one-sided tetrominoes]] fall down onto a play field. The
+player can move them side-to-side, and rotate them, to fit them into
+the pattern of the pieces already played.  They can also make the
+pieces move down more quickly.
+
+The player has a preview of (the) upcoming piece(s), and may be able
+to "hold" a piece, which they can then swap with the next/currently
+falling one.
+** Goal 
+If a complete row is filled with tiles, it disappears, and all the
+rows above it move down.  Multiple rows can be cleared at the same
+time.
+** TODO Lose Condition 
+If a piece intersects a square when it is spawned, it is game over.
+** TODO Scoring 
+The player scores points depending on how many rows are cleared in one
+go, as well as other factors?  After scoring a sufficient number of
+points, the level increases by 1, which causes the pieces to fall
+faster.
+
+This is the scoring system on https://tetris.com/play-tetris
+| Action                     |                    Score |
+|----------------------------+--------------------------|
+| Soft Drop                  | 1×Distance (whilst held) |
+| Hard Drop                  |               2×Distance |
+| Single Line Clear          |                      100 |
+| Double Line Clear          |                      300 |
+| Triple Line Clear          |                      500 |
+| Quadruple Line Clear       |                      800 |
+| T-Spin([[*T-Spin]])            |                      400 |
+| T-Spin Single (line clear) |                      800 |
+| T-Spin Double (line clear) |                     1200 |
+| T-Spin Triple (line clear) |                     1600 |
+| Back-to-Back               |     0.5×Tetris or T-Spin |
+* Pieces
+There are seven distinct one-sided [[*Interaction][tetrominoes]]: I, O, T, J, L, S, Z.
+* Controls
+** Horizontal Movement
+- Straightforward; can only move if there is space in the given
+  direction.
+** Rotation
+*** SRS
+Super/Standard/Smooth Rotation System
+- https://tetris.fandom.com/wiki/SRS
+- This is notable for specifying how [[*Kicks][kicks]] should behave.
+- It apparently creates interest in multiplayer, but causes problems
+  in single-player.
+*** Nintendo Rotation System
+https://tetris.fandom.com/wiki/Nintendo_Rotation_System
+- Similarly to horizontal movement, there must be space for the piece
+  in the next rotated orientation, although the rotation doesn't have
+  to make sense physically (see [[*T-Spin]]). 
+- A piece can either rotate about a single square (T, J, L, S, Z), or
+  a "corner" between squares (I, O) (this was made more obvious by the
+  [[*Pentris][Pentris]] zero-gravity mode.
+- The T, J, & L pieces all have 4 orientations, I, S & Z have 2 and O
+  has 1.
+*** Bastet
+Seems to use 4 states for every piece (probably including O) for
+simplicity.  The odd behaviour of the I piece under this scheme
+** Lock Delay
+https://tetris.fandom.com/wiki/Lock_delay
+** Kicks
+Basically, when a rotation is attempted, the piece is moved into a
+position where that orientation is possible.
+** Drop
+Pieces normally fall by themselves over time.
+- Soft :: Increase the falling speed while held.
+- Hard :: Immediately move the piece down to land directly below where
+  it is now.  Awkward to use without a [[*Piece Ghost][piece ghost]].
+* Advanced Techniques
+** T-Spin
+A T piece can be rotated to fill a gap underneath other tiles, which
+would otherwise be inaccessible.  Performing a T-Spin can lead to
+being awarded bonus points, especially if its placement clears lines
+(see [[*Scoring]]).
+https://youtu.be/FI39WJqTLvA
+* Piece Selection
+** Random
+Approved by Burgun2013.
+** N-Bag
+Shuffle a list of the possible pieces, then use that for the order to
+deliver them in.  Once all of the pieces in the current N-Bag have
+been seen, generate the next one.
+** Evil Tetris
+The only factor the computer agent can control is what piece is
+selected, so this is what is used to implement 
+*** [[http://fph.altervista.org/prog/bastet.html][Bastet]] (Bastard Tetris)
+A ncurses-based clone that picks the "worst possible [piece]".
+*** [[https://medium.com/@amoghhgoma/beatris-an-evil-tetris-ai-88fee6b068][Beatris]]
+An adversarial network.
+* Implementations and Variants
+** Official Tetris Website
+https://tetris.com/play-tetris
+** Pentris
+https://www.pentris.net/v3/
+- Rather than being restricted to tetrominoes, pieces with anywhere
+  between 1 and 5 tiles can be played.
+- This version has a "zero gravity" mode, where pieces only fall when
+  the player presses the drop buttons.
+** GameBoy
+- Doesn't implement the [[*SRS][Standard Rotation System]], etc., making it
+  harder.
+- Random pieces, only 1 (toggleable) piece preview.
+** Type B
+Start with a few incomplete rows before the game begins.
+* Assistance Features
+** Modern vs Classic Tetris
+- [[https://www.youtube.com/watch?v=GCQFauk80gE][Arguments against Modern Tetris Tier List]] (focus on Vs Tetris).
+- Burgun2013, p. xi.
+** Piece Ghost
+Shows a preview of where a piece would land if it dropped from its
+present position without being moved or rotated.
