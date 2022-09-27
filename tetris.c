@@ -16,6 +16,8 @@
 #include <stdlib.h>
 #include <time.h>
 
+#define LENGTH(X) ((sizeof(X)) / (sizeof(X[0])))
+
 typedef struct SDL_Context {
   SDL_Window *window;
   SDL_Surface *window_surface;
@@ -346,29 +348,34 @@ struct Piece rotated(struct Piece *piece, uint8_t steps) {
   return rotated_piece;
 }
 
-void draw_piece(SDL_Renderer *renderer, SDL_Texture *tiles,
-                struct Piece piece) {
-  const SDL_Rect texture_region = {piece.tetromino * TILE_SIZE, 0, TILE_SIZE,
-                                   TILE_SIZE};
-
-  PieceTiles piece_tiles;
-  memcpy(&piece_tiles, orientations[piece.tetromino][piece.rotation],
-         sizeof(PieceTiles));
-
+void draw_tilemap(SDL_Renderer *renderer, SDL_Texture *tiles,
+                  SDL_Rect *tile_region, int width, int height,
+                  const bool map[width * height], int x, int y) {
   SDL_Rect dest_rect;
   dest_rect.w = dest_rect.h = TILE_SIZE;
 
   for (int i = 0; i < 4; ++i) {
     for (int j = 0; j < 4; ++j) {
       {
-        if (piece_tiles[i][j]) {
-          dest_rect.x = PLAY_SPACE_X + (piece.x + j) * TILE_SIZE;
-          dest_rect.y = PLAY_SPACE_Y + (piece.y + i) * TILE_SIZE;
-          SDL_RenderCopy(renderer, tiles, &texture_region, &dest_rect);
+        if (map[height * i + j]) {
+          dest_rect.x = x + j * TILE_SIZE;
+          dest_rect.y = y + i * TILE_SIZE;
+          SDL_RenderCopy(renderer, tiles, tile_region, &dest_rect);
         }
       }
     }
   }
+}
+
+void draw_piece(SDL_Renderer *renderer, SDL_Texture *tiles,
+                struct Piece piece) {
+  SDL_Rect texture_region = {piece.tetromino * TILE_SIZE, 0, TILE_SIZE,
+                             TILE_SIZE};
+
+  draw_tilemap(renderer, tiles, &texture_region, 4, 4,
+               (bool *)&orientations[piece.tetromino][piece.rotation],
+               piece.x * TILE_SIZE + PLAY_SPACE_X,
+               piece.y * TILE_SIZE + PLAY_SPACE_Y);
 }
 
 int main() {
@@ -382,7 +389,6 @@ int main() {
 
   PlaySpace play_space;
   memset(&play_space, 0, sizeof(PlaySpace));
-
 
   bool quit = false;
   while (!quit) {
