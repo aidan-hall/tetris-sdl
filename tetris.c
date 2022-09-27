@@ -392,11 +392,37 @@ struct Piece rotated(struct Piece *piece, uint8_t steps) {
   rotated_piece.rotation = (piece->rotation + steps) % 4;
   return rotated_piece;
 }
+enum Move {
+  MOVE_NONE,
+  MOVE_LEFT,
+  MOVE_RIGHT,
+  MOVE_CLOCKWISE,
+  MOVE_ANTICLOCKWISE,
+};
 
-void maybe_move(struct Piece *piece, struct Piece result,
-                PlaySpace play_space) {
-  if (!collides(play_space, result)) {
-    *piece = result;
+void maybe_move(struct Piece *piece, enum Move move, PlaySpace play_space) {
+  struct Piece translated;
+  switch (move) {
+  case MOVE_LEFT:
+    translated = *piece;
+    translated.x -= 1;
+    break;
+  case MOVE_RIGHT:
+    translated = *piece;
+    translated.x += 1;
+    break;
+  case MOVE_CLOCKWISE:
+    translated = rotated(piece, 1);
+    break;
+  case MOVE_ANTICLOCKWISE:
+    translated = rotated(piece, -1);
+    break;
+  case MOVE_NONE:
+    return;
+  }
+
+  if (!collides(play_space, translated)) {
+    *piece = translated;
   }
 }
 
@@ -498,8 +524,7 @@ int main() {
 
       SDL_Event event;
       {
-        struct Piece translated = piece;
-        bool translate = false;
+        enum Move move = MOVE_NONE;
         while (SDL_PollEvent(&event) != 0) {
           switch ((SDL_EventType)event.type) {
           case SDL_QUIT:
@@ -512,32 +537,30 @@ int main() {
               spawn_next_piece(&piece, &next_piece);
               break;
             case SDLK_c:
-              translated = rotated(&piece, 1);
-              translate = true;
+              move = MOVE_CLOCKWISE;
               break;
             case SDLK_x:
-              translated = rotated(&piece, -1);
-              translate = true;
+              move = MOVE_ANTICLOCKWISE;
               break;
             case SDLK_LEFT:
-              /* Only use initial press; reset hold cycle to avoid double moves. */
-              if (event.key.repeat == 0) {
+              /* Only use initial press; reset hold cycle to avoid double moves.
+               */
+              if (event.key.repeat == 0 && move == MOVE_NONE) {
                 shift_cycle = 0;
-                translated.x -= 1;
-                translate = true;
+                move = MOVE_LEFT;
               }
               break;
             case SDLK_RIGHT:
               /* See above. */
-              if (event.key.repeat == 0) {
+              if (event.key.repeat == 0 && move == MOVE_NONE) {
                 shift_cycle = 0;
-                translated.x += 1;
-                translate = true;
+                move = MOVE_RIGHT;
               }
               break;
             case SDLK_r:
               /* Restart */
               quit = true;
+              break;
             default:
               break;
             }
@@ -559,19 +582,17 @@ int main() {
         if (shift_cycle >= shift_speed) {
           shift_cycle = 0;
           if (keys[SDL_SCANCODE_LEFT]) {
-            translated.x -= 1;
-            translate = true;
+            move = MOVE_LEFT;
           }
           if (keys[SDL_SCANCODE_RIGHT]) {
-            translated.x += 1;
-            translate = true;
+            move = MOVE_RIGHT;
           }
         } else {
           shift_cycle += 1;
         }
 
-        if (translate)
-          maybe_move(&piece, translated, play_space);
+        if (move != MOVE_NONE)
+          maybe_move(&piece, move, play_space);
       }
 
       /* Dropping & Collision */
