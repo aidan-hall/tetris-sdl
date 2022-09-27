@@ -7,6 +7,7 @@
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_video.h>
 #include <SDL_hints.h>
+#include <SDL_keyboard.h>
 #include <SDL_keycode.h>
 #include <SDL_surface.h>
 #include <SDL_timer.h>
@@ -20,7 +21,8 @@
 #define LENGTH(X) ((sizeof(X)) / (sizeof(X[0])))
 #define FPS (60)
 #define FRAME_LENGTH (1000 / FPS)
-#define DROP_FRAMES (20)
+#define DROP_FRAMES (30)
+#define SOFT_DROP_FRAMES (10)
 
 typedef struct SDL_Context {
   SDL_Window *window;
@@ -463,6 +465,7 @@ int main() {
 
   bool quit = false;
   uint8_t drop_cycle = 0;
+  uint32_t drop_cycle_speed = DROP_FRAMES;
   while (!quit) {
     uint64_t tick = SDL_GetTicks();
     SDL_Event event;
@@ -505,6 +508,14 @@ int main() {
         }
       }
 
+      int32_t n_keys;
+      const uint8_t *keys = SDL_GetKeyboardState(&n_keys);
+      if (keys[SDL_SCANCODE_DOWN]) {
+        drop_cycle_speed = SOFT_DROP_FRAMES;
+      } else {
+        drop_cycle_speed = DROP_FRAMES;
+      }
+
       if (translate)
         maybe_move(&piece, translated, play_space);
     }
@@ -515,6 +526,13 @@ int main() {
       drop_cycle = 0;
     } else {
       drop_cycle++;
+    }
+
+    /* Piece landing */
+    if (collides(play_space, piece)) {
+      piece.y -= 1;
+      place_piece(play_space, piece);
+      spawn_next_piece(&piece, &next_piece);
     }
 
     {
