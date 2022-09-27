@@ -535,6 +535,10 @@ int main() {
       spawn_next_piece(&piece, &next_piece);
     }
 
+    if (collides(play_space, piece)) {
+      quit = true;
+    }
+
     {
       /* Rendering */
       SDL_Renderer *r = ctx.renderer;
@@ -558,6 +562,10 @@ int main() {
     uint64_t ending_tick = SDL_GetTicks64();
     SDL_Delay(FRAME_LENGTH - (ending_tick - tick));
   }
+
+
+  printf("Game Over!\n");
+  SDL_Delay(500);
 
   SDL_DestroyTexture(tiles);
   close_sdl_context(ctx);
