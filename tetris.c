@@ -6,6 +6,7 @@
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_video.h>
+#include <SDL_hints.h>
 #include <SDL_keycode.h>
 #include <SDL_surface.h>
 #include <SDL_timer.h>
@@ -17,6 +18,9 @@
 #include <time.h>
 
 #define LENGTH(X) ((sizeof(X)) / (sizeof(X[0])))
+#define FPS (60)
+#define FRAME_LENGTH (1000 / FPS)
+#define DROP_FRAMES (20)
 
 typedef struct SDL_Context {
   SDL_Window *window;
@@ -78,8 +82,8 @@ SDL_Context make_sdl_context() {
   }
 
   // Create renderer for window.
-  context.renderer =
-      SDL_CreateRenderer(context.window, -1, SDL_RENDERER_ACCELERATED);
+  context.renderer = SDL_CreateRenderer(
+      context.window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (context.renderer == NULL)
     exit(1);
 
@@ -130,6 +134,16 @@ enum Tetromino {
   TET_S,
   TET_Z,
   TET_NUM,
+  TET_EMPTY = TET_NUM,
+};
+
+#define PIECE_REGION(I)                                                        \
+  { I *TILE_SIZE, 0, TILE_SIZE, TILE_SIZE }
+/* Can't be const due to SDL's API. */
+SDL_Rect piece_regions[TET_NUM] = {
+    PIECE_REGION(TET_I), PIECE_REGION(TET_O), PIECE_REGION(TET_T),
+    PIECE_REGION(TET_J), PIECE_REGION(TET_L), PIECE_REGION(TET_S),
+    PIECE_REGION(TET_Z),
 };
 
 enum Tetromino pick_piece() { return rand() % TET_NUM; }
@@ -138,207 +152,231 @@ struct Piece {
   /** [0-3] */
   uint8_t rotation : 2;
   enum Tetromino tetromino : 3;
-  uint8_t x;
-  uint8_t y;
+  int8_t x;
+  int8_t y;
 };
 
-typedef bool PieceTiles[4][4];
-typedef bool PlaySpace[PLAY_SPACE_HEIGHT][PLAY_SPACE_WIDTH];
+typedef enum Tetromino PieceTiles[4][4];
+typedef enum Tetromino PlaySpace[PLAY_SPACE_HEIGHT][PLAY_SPACE_WIDTH];
 
 const PieceTiles orientations[TET_NUM][4] = {
     /* I */
     {
         {
+            {7, 7, 7, 7},
+            {7, 7, 7, 7},
             {0, 0, 0, 0},
-            {0, 0, 0, 0},
-            {1, 1, 1, 1},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
         },
         {
-            {0, 1, 0, 0},
-            {0, 1, 0, 0},
-            {0, 1, 0, 0},
-            {0, 1, 0, 0},
+            {7, 0, 7, 7},
+            {7, 0, 7, 7},
+            {7, 0, 7, 7},
+            {7, 0, 7, 7},
         },
         {
+            {7, 7, 7, 7},
             {0, 0, 0, 0},
-            {1, 1, 1, 1},
-            {0, 0, 0, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 0, 1, 0},
-            {0, 0, 1, 0},
-            {0, 0, 1, 0},
-            {0, 0, 1, 0},
+            {7, 7, 0, 7},
+            {7, 7, 0, 7},
+            {7, 7, 0, 7},
+            {7, 7, 0, 7},
         },
     },
     /* O */
     {
         {
-            {0, 0, 0, 0},
-            {0, 1, 1, 0},
-            {0, 1, 1, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {7, 1, 1, 7},
+            {7, 1, 1, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 0, 0, 0},
-            {0, 1, 1, 0},
-            {0, 1, 1, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {7, 1, 1, 7},
+            {7, 1, 1, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 0, 0, 0},
-            {0, 1, 1, 0},
-            {0, 1, 1, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {7, 1, 1, 7},
+            {7, 1, 1, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 0, 0, 0},
-            {0, 1, 1, 0},
-            {0, 1, 1, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {7, 1, 1, 7},
+            {7, 1, 1, 7},
+            {7, 7, 7, 7},
         },
     },
     /* T */
     {
         {
-            {0, 1, 0, 0},
-            {1, 1, 1, 0},
-            {0, 0, 0, 0},
-            {0, 0, 0, 0},
+            {7, 2, 7, 7},
+            {2, 2, 2, 7},
+            {7, 7, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 1, 0, 0},
-            {0, 1, 1, 0},
-            {0, 1, 0, 0},
-            {0, 0, 0, 0},
+            {7, 2, 7, 7},
+            {7, 2, 2, 7},
+            {7, 2, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 0, 0, 0},
-            {1, 1, 1, 0},
-            {0, 1, 0, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {2, 2, 2, 7},
+            {7, 2, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 1, 0, 0},
-            {1, 1, 0, 0},
-            {0, 1, 0, 0},
-            {0, 0, 0, 0},
+            {7, 2, 7, 7},
+            {2, 2, 7, 7},
+            {7, 2, 7, 7},
+            {7, 7, 7, 7},
         },
     },
     /* J */
     {
         {
-            {1, 0, 0, 0},
-            {1, 1, 1, 0},
-            {0, 0, 0, 0},
-            {0, 0, 0, 0},
+            {3, 7, 7, 7},
+            {3, 3, 3, 7},
+            {7, 7, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 1, 1, 0},
-            {0, 1, 0, 0},
-            {0, 1, 0, 0},
-            {0, 0, 0, 0},
+            {7, 3, 3, 7},
+            {7, 3, 7, 7},
+            {7, 3, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 0, 0, 0},
-            {1, 1, 1, 0},
-            {0, 0, 1, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {3, 3, 3, 7},
+            {7, 7, 3, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 1, 0, 0},
-            {0, 1, 0, 0},
-            {1, 1, 0, 0},
-            {0, 0, 0, 0},
+            {7, 3, 7, 7},
+            {7, 3, 7, 7},
+            {3, 3, 7, 7},
+            {7, 7, 7, 7},
         },
     },
     /* L */
     {
         {
-            {0, 0, 1, 0},
-            {1, 1, 1, 0},
-            {0, 0, 0, 0},
-            {0, 0, 0, 0},
+            {7, 7, 4, 7},
+            {4, 4, 4, 7},
+            {7, 7, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 1, 0, 0},
-            {0, 1, 0, 0},
-            {0, 1, 1, 0},
-            {0, 0, 0, 0},
+            {7, 4, 7, 7},
+            {7, 4, 7, 7},
+            {7, 4, 4, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 0, 0, 0},
-            {1, 1, 1, 0},
-            {1, 0, 0, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {4, 4, 4, 7},
+            {4, 7, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {1, 1, 0, 0},
-            {0, 1, 0, 0},
-            {0, 1, 0, 0},
-            {0, 0, 0, 0},
+            {4, 4, 7, 7},
+            {7, 4, 7, 7},
+            {7, 4, 7, 7},
+            {7, 7, 7, 7},
         },
     },
     /* S */
     {
         {
-            {0, 0, 0, 0},
-            {0, 1, 1, 0},
-            {1, 1, 0, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {7, 5, 5, 7},
+            {5, 5, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {1, 0, 0, 0},
-            {1, 1, 0, 0},
-            {0, 1, 0, 0},
-            {0, 0, 0, 0},
+            {5, 7, 7, 7},
+            {5, 5, 7, 7},
+            {7, 5, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 1, 1, 0},
-            {1, 1, 0, 0},
-            {0, 0, 0, 0},
-            {0, 0, 0, 0},
+            {7, 5, 5, 7},
+            {5, 5, 7, 7},
+            {7, 7, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 1, 0, 0},
-            {0, 1, 1, 0},
-            {0, 0, 1, 0},
-            {0, 0, 0, 0},
+            {7, 5, 7, 7},
+            {7, 5, 5, 7},
+            {7, 7, 5, 7},
+            {7, 7, 7, 7},
         },
     },
     /* Z */
     {
         {
-            {0, 0, 0, 0},
-            {1, 1, 0, 0},
-            {0, 1, 1, 0},
-            {0, 0, 0, 0},
+            {7, 7, 7, 7},
+            {6, 6, 7, 7},
+            {7, 6, 6, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 1, 0, 0},
-            {1, 1, 0, 0},
-            {1, 0, 0, 0},
-            {0, 0, 0, 0},
+            {7, 6, 7, 7},
+            {6, 6, 7, 7},
+            {6, 7, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {1, 1, 0, 0},
-            {0, 1, 1, 0},
-            {0, 0, 0, 0},
-            {0, 0, 0, 0},
+            {6, 6, 7, 7},
+            {7, 6, 6, 7},
+            {7, 7, 7, 7},
+            {7, 7, 7, 7},
         },
         {
-            {0, 0, 1, 0},
-            {0, 1, 1, 0},
-            {0, 1, 0, 0},
-            {0, 0, 0, 0},
+            {7, 7, 6, 7},
+            {7, 6, 6, 7},
+            {7, 6, 7, 7},
+            {7, 7, 7, 7},
         },
     },
 };
 
 const PieceTiles *piece_tiles(struct Piece piece) {
   return &orientations[piece.tetromino][piece.rotation];
+}
+
+bool collides(PlaySpace play_space, struct Piece piece) {
+  const PieceTiles *tiles = piece_tiles(piece);
+
+  for (int i = 0; i < 4; ++i) {
+    for (int j = 0; j < 4; ++j) {
+      if ((*tiles)[i][j] != TET_EMPTY) {
+        int tile_x = j + piece.x;
+        int tile_y = i + piece.y;
+        /* Ensures that bounds checking is performed before indexing into
+         * play_space memory. */
+        if (tile_x < 0 || tile_x >= PLAY_SPACE_WIDTH || tile_y < 0 ||
+            tile_y >= PLAY_SPACE_HEIGHT) {
+          return true;
+        }
+        if (play_space[tile_y][tile_x] != TET_EMPTY) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 struct Piece spawn_piece() {
@@ -352,19 +390,28 @@ struct Piece rotated(struct Piece *piece, uint8_t steps) {
   return rotated_piece;
 }
 
-void draw_tilemap(SDL_Renderer *renderer, SDL_Texture *tiles,
-                  SDL_Rect *tile_region, int width, int height,
-                  const bool map[width * height], int x, int y) {
+void maybe_move(struct Piece *piece, struct Piece result,
+                PlaySpace play_space) {
+  if (!collides(play_space, result)) {
+    *piece = result;
+  }
+}
+
+void draw_tilemap(SDL_Renderer *renderer, SDL_Texture *tiles, int width,
+                  int height, const enum Tetromino map[width * height], int x,
+                  int y) {
   SDL_Rect dest_rect;
   dest_rect.w = dest_rect.h = TILE_SIZE;
 
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 0; j < 4; ++j) {
+  for (int i = 0; i < height; ++i) {
+    for (int j = 0; j < width; ++j) {
       {
-        if (map[height * i + j]) {
+        /* Don't need to draw blank tiles */
+        const enum Tetromino tet = map[width * i + j];
+        if (tet != TET_EMPTY) {
           dest_rect.x = x + j * TILE_SIZE;
           dest_rect.y = y + i * TILE_SIZE;
-          SDL_RenderCopy(renderer, tiles, tile_region, &dest_rect);
+          SDL_RenderCopy(renderer, tiles, &piece_regions[tet], &dest_rect);
         }
       }
     }
@@ -373,11 +420,9 @@ void draw_tilemap(SDL_Renderer *renderer, SDL_Texture *tiles,
 
 void draw_piece(SDL_Renderer *renderer, SDL_Texture *tiles,
                 struct Piece piece) {
-  SDL_Rect texture_region = {piece.tetromino * TILE_SIZE, 0, TILE_SIZE,
-                             TILE_SIZE};
 
-  draw_tilemap(renderer, tiles, &texture_region, 4, 4,
-               (bool *)piece_tiles(piece), piece.x * TILE_SIZE + PLAY_SPACE_X,
+  draw_tilemap(renderer, tiles, 4, 4, (enum Tetromino *)piece_tiles(piece),
+               piece.x * TILE_SIZE + PLAY_SPACE_X,
                piece.y * TILE_SIZE + PLAY_SPACE_Y);
 }
 
@@ -391,34 +436,58 @@ int main() {
   struct Piece piece = spawn_piece();
 
   PlaySpace play_space;
-  memset(&play_space, 0, sizeof(PlaySpace));
+  for (int i = 0; i < PLAY_SPACE_HEIGHT; ++i) {
+    for (int j = 0; j < PLAY_SPACE_WIDTH; ++j) {
+      play_space[i][j] = TET_EMPTY;
+    }
+  }
 
   bool quit = false;
+  uint8_t drop_cycle = 0;
   while (!quit) {
+    uint64_t tick = SDL_GetTicks();
     SDL_Event event;
-    while (SDL_PollEvent(&event) != 0) {
-      switch ((SDL_EventType)event.type) {
-      case SDL_QUIT:
-        quit = true;
-        break;
-      case SDL_KEYDOWN:
-        switch ((SDL_KeyCode)event.key.keysym.sym) {
-        case SDLK_SPACE:
-          piece = spawn_piece();
+    {
+      struct Piece translated = piece;
+      bool translate = false;
+      while (SDL_PollEvent(&event) != 0) {
+        switch ((SDL_EventType)event.type) {
+        case SDL_QUIT:
+          quit = true;
           break;
-        case SDLK_c:
-          piece = rotated(&piece, 1);
-          break;
-        case SDLK_x:
-          piece = rotated(&piece, -1);
+        case SDL_KEYDOWN: {
+          switch ((SDL_KeyCode)event.key.keysym.sym) {
+          case SDLK_SPACE:
+            piece = spawn_piece();
+            break;
+          case SDLK_c:
+            translated = rotated(&piece, 1);
+            translate = true;
+            break;
+          case SDLK_x:
+            translated = rotated(&piece, -1);
+            translate = true;
+            break;
+          case SDLK_LEFT:
+            translated.x -= 1;
+            translate = true;
+            break;
+          case SDLK_RIGHT:
+            translated.x += 1;
+            translate = true;
+            break;
+          default:
+            break;
+          }
           break;
         default:
           break;
         }
-        break;
-      default:
-        break;
+        }
       }
+
+      if (translate)
+        maybe_move(&piece, translated, play_space);
     }
 
     {
@@ -431,10 +500,19 @@ int main() {
       SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
       SDL_RenderDrawRect(r, &PLAY_SPACE_DIMENSIONS);
 
-      /* Piece */
+      /* Game Elements */
+      draw_tilemap(r, tiles, PLAY_SPACE_WIDTH, PLAY_SPACE_HEIGHT,
+                   (enum Tetromino *)&play_space, PLAY_SPACE_X, PLAY_SPACE_Y);
       draw_piece(r, tiles, piece);
       SDL_RenderPresent(r);
     }
+
+    if (collides(play_space, piece)) {
+      puts("Collision!");
+    }
+
+    uint64_t ending_tick = SDL_GetTicks64();
+    SDL_Delay(FRAME_LENGTH - (ending_tick - tick));
   }
 
   SDL_DestroyTexture(tiles);
