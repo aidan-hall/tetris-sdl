@@ -482,6 +482,8 @@ int main() {
 
     bool quit = false;
     uint8_t drop_cycle = 0;
+    const uint8_t shift_speed = 8;
+    uint8_t shift_cycle = 0;
     uint32_t drop_cycle_speed = DROP_FRAMES;
     int score = 0;
     int total_clears = 0;
@@ -518,12 +520,20 @@ int main() {
               translate = true;
               break;
             case SDLK_LEFT:
-              translated.x -= 1;
-              translate = true;
+              /* Only use initial press; reset hold cycle to avoid double moves. */
+              if (event.key.repeat == 0) {
+                shift_cycle = 0;
+                translated.x -= 1;
+                translate = true;
+              }
               break;
             case SDLK_RIGHT:
-              translated.x += 1;
-              translate = true;
+              /* See above. */
+              if (event.key.repeat == 0) {
+                shift_cycle = 0;
+                translated.x += 1;
+                translate = true;
+              }
               break;
             case SDLK_r:
               /* Restart */
@@ -544,6 +554,20 @@ int main() {
           drop_cycle_speed = SOFT_DROP_FRAMES;
         } else {
           drop_cycle_speed = DROP_FRAMES - level * DROP_FRAMES_DECREMENT;
+        }
+
+        if (shift_cycle >= shift_speed) {
+          shift_cycle = 0;
+          if (keys[SDL_SCANCODE_LEFT]) {
+            translated.x -= 1;
+            translate = true;
+          }
+          if (keys[SDL_SCANCODE_RIGHT]) {
+            translated.x += 1;
+            translate = true;
+          }
+        } else {
+          shift_cycle += 1;
         }
 
         if (translate)
