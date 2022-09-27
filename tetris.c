@@ -22,7 +22,8 @@
 #define FPS (60)
 #define FRAME_LENGTH (1000 / FPS)
 #define DROP_FRAMES (30)
-#define SOFT_DROP_FRAMES (10)
+#define DROP_FRAMES_DECREMENT (3)
+#define SOFT_DROP_FRAMES (5)
 
 typedef struct SDL_Context {
   SDL_Window *window;
@@ -445,128 +446,212 @@ void place_piece(PlaySpace play_space, struct Piece piece) {
   }
 }
 
+const int clear_scores[4] = {
+    100,
+    300,
+    500,
+    800,
+};
+
 int main() {
   srand(time(NULL));
 
   SDL_Context ctx = make_sdl_context();
 
-  SDL_Texture *tiles = load_texture(ctx, "art/small-tiles.png");
-
-  enum Tetromino next_piece = pick_piece();
-  struct Piece piece;
-  spawn_next_piece(&piece, &next_piece);
-
-  PlaySpace play_space;
-  for (int i = 0; i < PLAY_SPACE_HEIGHT; ++i) {
-    for (int j = 0; j < PLAY_SPACE_WIDTH; ++j) {
-      play_space[i][j] = TET_EMPTY;
-    }
+  Mix_Chunk *sound_clear = Mix_LoadWAV("sound/clear.wav");
+  if (sound_clear == NULL) {
+    puts("Couldn't load clear sound.");
+    exit(1);
   }
 
-  bool quit = false;
-  uint8_t drop_cycle = 0;
-  uint32_t drop_cycle_speed = DROP_FRAMES;
-  while (!quit) {
-    uint64_t tick = SDL_GetTicks();
-    SDL_Event event;
-    {
-      struct Piece translated = piece;
-      bool translate = false;
-      while (SDL_PollEvent(&event) != 0) {
-        switch ((SDL_EventType)event.type) {
-        case SDL_QUIT:
-          quit = true;
-          break;
-        case SDL_KEYDOWN: {
-          switch ((SDL_KeyCode)event.key.keysym.sym) {
-          case SDLK_SPACE:
-            spawn_next_piece(&piece, &next_piece);
+  SDL_Texture *tiles = load_texture(ctx, "art/small-tiles.png");
+
+  bool restart = true;
+
+  while (restart) {
+    enum Tetromino next_piece = pick_piece();
+    struct Piece piece;
+    spawn_next_piece(&piece, &next_piece);
+
+    PlaySpace play_space;
+    for (int i = 0; i < PLAY_SPACE_HEIGHT; ++i) {
+      for (int j = 0; j < PLAY_SPACE_WIDTH; ++j) {
+        play_space[i][j] = TET_EMPTY;
+      }
+    }
+
+    bool quit = false;
+    uint8_t drop_cycle = 0;
+    uint32_t drop_cycle_speed = DROP_FRAMES;
+    int score = 0;
+    int total_clears = 0;
+    int level = 0;
+    while (!quit) {
+      uint64_t tick = SDL_GetTicks();
+      if (total_clears >= 8) {
+        level += 1;
+        total_clears -= 8;
+        printf("Level Up: %d\n", level);
+      }
+
+      SDL_Event event;
+      {
+        struct Piece translated = piece;
+        bool translate = false;
+        while (SDL_PollEvent(&event) != 0) {
+          switch ((SDL_EventType)event.type) {
+          case SDL_QUIT:
+            quit = true;
+            restart = false;
             break;
-          case SDLK_c:
-            translated = rotated(&piece, 1);
-            translate = true;
-            break;
-          case SDLK_x:
-            translated = rotated(&piece, -1);
-            translate = true;
-            break;
-          case SDLK_LEFT:
-            translated.x -= 1;
-            translate = true;
-            break;
-          case SDLK_RIGHT:
-            translated.x += 1;
-            translate = true;
+          case SDL_KEYDOWN: {
+            switch ((SDL_KeyCode)event.key.keysym.sym) {
+            case SDLK_SPACE:
+              spawn_next_piece(&piece, &next_piece);
+              break;
+            case SDLK_c:
+              translated = rotated(&piece, 1);
+              translate = true;
+              break;
+            case SDLK_x:
+              translated = rotated(&piece, -1);
+              translate = true;
+              break;
+            case SDLK_LEFT:
+              translated.x -= 1;
+              translate = true;
+              break;
+            case SDLK_RIGHT:
+              translated.x += 1;
+              translate = true;
+              break;
+            case SDLK_r:
+              /* Restart */
+              quit = true;
+            default:
+              break;
+            }
             break;
           default:
             break;
           }
-          break;
-        default:
-          break;
+          }
         }
+
+        int32_t n_keys;
+        const uint8_t *keys = SDL_GetKeyboardState(&n_keys);
+        if (keys[SDL_SCANCODE_DOWN]) {
+          drop_cycle_speed = SOFT_DROP_FRAMES;
+        } else {
+          drop_cycle_speed = DROP_FRAMES - level * DROP_FRAMES_DECREMENT;
         }
+
+        if (translate)
+          maybe_move(&piece, translated, play_space);
       }
 
-      int32_t n_keys;
-      const uint8_t *keys = SDL_GetKeyboardState(&n_keys);
-      if (keys[SDL_SCANCODE_DOWN]) {
-        drop_cycle_speed = SOFT_DROP_FRAMES;
+      /* Dropping & Collision */
+      if (drop_cycle >= drop_cycle_speed) {
+        piece.y += 1;
+        drop_cycle = 0;
       } else {
-        drop_cycle_speed = DROP_FRAMES;
+        drop_cycle++;
       }
 
-      if (translate)
-        maybe_move(&piece, translated, play_space);
+      /* Piece landing */
+      if (collides(play_space, piece)) {
+        piece.y -= 1;
+        place_piece(play_space, piece);
+        spawn_next_piece(&piece, &next_piece);
+      }
+
+      /* Row Clearing */
+      int clears[PLAY_SPACE_HEIGHT];
+      int n_clears = 0;
+      for (int i = 0; i < PLAY_SPACE_HEIGHT; ++i) {
+        bool full = true;
+        for (int j = 0; j < PLAY_SPACE_WIDTH; ++j) {
+          if (play_space[i][j] == TET_EMPTY) {
+            full = false;
+            break;
+          }
+        }
+
+        if (full) {
+          clears[n_clears] = i;
+          n_clears++;
+        }
+      }
+
+      {
+        /* Rendering */
+        SDL_Renderer *r = ctx.renderer;
+        SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
+        SDL_RenderClear(r);
+
+        /* UI */
+        SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
+        SDL_RenderDrawRect(r, &PLAY_SPACE_DIMENSIONS);
+
+        /* Game Elements */
+        draw_tilemap(r, tiles, PLAY_SPACE_WIDTH, PLAY_SPACE_HEIGHT,
+                     (enum Tetromino *)&play_space, PLAY_SPACE_X, PLAY_SPACE_Y);
+        /* Current piece */
+        draw_piece(r, tiles, piece);
+
+        /* Piece Preview */
+        draw_piece(r, tiles, (struct Piece){0, next_piece, -5, 3});
+
+        /* Highlight CLEARED rows, and delete. */
+        if (n_clears > 0) {
+          assert(n_clears <= 4);
+
+          /* Start at level 0 so multiply by level + 1. */
+          score += clear_scores[n_clears - 1] * (level + 1);
+          total_clears += n_clears;
+          printf("Score: %d\n", score);
+
+          Mix_PlayChannel(-1, sound_clear, 0);
+
+          SDL_SetRenderDrawColor(r, 255, 0, 0, 255);
+
+          SDL_Rect row_rect;
+          row_rect.w = PLAY_SPACE_PIXEL_WIDTH;
+          row_rect.h = TILE_SIZE;
+          row_rect.x = PLAY_SPACE_X;
+          for (int i = 0; i < n_clears; ++i) {
+            row_rect.y = PLAY_SPACE_Y + TILE_SIZE * clears[i];
+            SDL_RenderFillRect(r, &row_rect);
+            /* Move all the rows down 1, and clear out the top row. */
+            memmove(&play_space[1], &play_space[0],
+                    clears[i] * PLAY_SPACE_WIDTH * sizeof(enum Tetromino));
+            for (int j = 0; j < PLAY_SPACE_WIDTH; ++j) {
+              play_space[0][j] = TET_EMPTY;
+            }
+          }
+        }
+        SDL_RenderPresent(r);
+        /* Pause to emphasise cleared rows after drawing them. */
+        if (n_clears > 0) {
+          SDL_Delay(500);
+        }
+      }
+
+      /* Game Over Condition */
+      if (collides(play_space, piece)) {
+        quit = true;
+      }
+
+      uint64_t ending_tick = SDL_GetTicks64();
+      uint64_t wait_time = FRAME_LENGTH - (ending_tick - tick);
+      SDL_Delay((wait_time < FRAME_LENGTH) ? wait_time : FRAME_LENGTH);
     }
 
-    /* Dropping & Collision */
-    if (drop_cycle >= drop_cycle_speed) {
-      piece.y += 1;
-      drop_cycle = 0;
-    } else {
-      drop_cycle++;
-    }
-
-    /* Piece landing */
-    if (collides(play_space, piece)) {
-      piece.y -= 1;
-      place_piece(play_space, piece);
-      spawn_next_piece(&piece, &next_piece);
-    }
-
-    if (collides(play_space, piece)) {
-      quit = true;
-    }
-
-    {
-      /* Rendering */
-      SDL_Renderer *r = ctx.renderer;
-      SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
-      SDL_RenderClear(r);
-
-      /* UI */
-      SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
-      SDL_RenderDrawRect(r, &PLAY_SPACE_DIMENSIONS);
-
-      /* Game Elements */
-      draw_tilemap(r, tiles, PLAY_SPACE_WIDTH, PLAY_SPACE_HEIGHT,
-                   (enum Tetromino *)&play_space, PLAY_SPACE_X, PLAY_SPACE_Y);
-      /* Current piece */
-      draw_piece(r, tiles, piece);
-
-      draw_piece(r, tiles, (struct Piece){0, next_piece, -5, 3});
-      SDL_RenderPresent(r);
-    }
-
-    uint64_t ending_tick = SDL_GetTicks64();
-    SDL_Delay(FRAME_LENGTH - (ending_tick - tick));
+    printf("Game Over!\n");
+    SDL_Delay(500);
   }
 
-
-  printf("Game Over!\n");
-  SDL_Delay(500);
-
+  Mix_FreeChunk(sound_clear);
   SDL_DestroyTexture(tiles);
   close_sdl_context(ctx);
 }
