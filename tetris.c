@@ -14,10 +14,10 @@
 #define DROP_FRAMES_DECREMENT (3)
 #define SOFT_DROP_FRAMES (5)
 
-const int WINDOW_WIDTH = 500;
-const int WINDOW_HEIGHT = 500;
+#define WINDOW_WIDTH (500)
+#define WINDOW_HEIGHT (500)
 
-const int TILE_SIZE = 24;
+#define TILE_SIZE (24)
 
 #define PLAY_SPACE_HEIGHT (20)
 #define PLAY_SPACE_WIDTH (10)
@@ -27,7 +27,7 @@ const int TILE_SIZE = 24;
 #define PLAY_SPACE_Y (6)
 
 /* Include (1 pixel) padding around play space. */
-const Rectangle PLAY_SPACE_DIMENSIONS = {
+Rectangle PLAY_SPACE_DIMENSIONS = {
     PLAY_SPACE_X - 1,
     PLAY_SPACE_Y - 1,
     PLAY_SPACE_WIDTH *TILE_SIZE + 1,
@@ -59,8 +59,8 @@ enum Tetromino pick_piece() { return rand() % TET_NUM; }
 
 struct Piece {
   /** [0-3] */
-  uint8_t rotation : 2;
-  enum Tetromino tetromino : 3;
+  uint8_t rotation;
+  enum Tetromino tetromino;
   int8_t x;
   int8_t y;
 };
@@ -290,6 +290,7 @@ bool collides(PlaySpace play_space, struct Piece piece) {
 
 struct Piece spawn_piece(enum Tetromino tetromino) {
   struct Piece piece = {0, tetromino, 3, 0};
+  printf("Spawning piece: %d\n", tetromino);
   return piece;
 }
 
@@ -358,7 +359,7 @@ void maybe_move(struct Piece *piece, enum Move move, PlaySpace play_space) {
 }
 
 void draw_tilemap(Texture2D *tiles, int width, int height,
-                  const enum Tetromino map[width * height], int x, int y) {
+                  const enum Tetromino map[], int x, int y) {
   Rectangle dest_rect;
   dest_rect.height = dest_rect.width = TILE_SIZE;
 
@@ -463,7 +464,7 @@ int main() {
           move = MOVE_CLOCKWISE;
         }
         if (IsKeyPressed(KEY_X)) {
-          move = MOVE_CLOCKWISE;
+          move = MOVE_ANTICLOCKWISE;
         }
         if (IsKeyPressed(KEY_C)) {
           move = MOVE_CLOCKWISE;
