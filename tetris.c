@@ -357,7 +357,7 @@ void maybe_move(struct Piece *piece, enum Move move, PlaySpace play_space) {
   }
 }
 
-void draw_tilemap(void *tiles, int width, int height,
+void draw_tilemap(Texture2D *tiles, int width, int height,
                   const enum Tetromino map[width * height], int x, int y) {
   Rectangle dest_rect;
   dest_rect.height = dest_rect.width = TILE_SIZE;
@@ -370,14 +370,15 @@ void draw_tilemap(void *tiles, int width, int height,
         if (tet != TET_EMPTY) {
           dest_rect.x = x + j * TILE_SIZE;
           dest_rect.y = y + i * TILE_SIZE;
-          DrawRectangleRec(dest_rect, RED);
+          DrawTexturePro(*tiles, piece_regions[tet], dest_rect, (Vector2){0, 0},
+                         0, WHITE);
         }
       }
     }
   }
 }
 
-void draw_piece(void *tiles, struct Piece piece) {
+void draw_piece(Texture2D *tiles, struct Piece piece) {
 
   draw_tilemap(tiles, 4, 4, (enum Tetromino *)piece_tiles(piece),
                piece.x * TILE_SIZE + PLAY_SPACE_X,
@@ -420,6 +421,7 @@ int main() {
   /*   exit(1); */
   /* } */
 
+  Texture2D tiles = LoadTexture("art/small-tiles.png");
   /* SDL_Texture *tiles = load_texture(ctx, "art/small-tiles.png"); */
 
   bool restart = true;
@@ -549,16 +551,15 @@ int main() {
         /* UI */
         DrawRectangleLinesEx(PLAY_SPACE_DIMENSIONS, 1.0f, BLUE);
 
-        void *tiles = NULL;
         /* Game Elements */
-        draw_tilemap(tiles, PLAY_SPACE_WIDTH, PLAY_SPACE_HEIGHT,
+        draw_tilemap(&tiles, PLAY_SPACE_WIDTH, PLAY_SPACE_HEIGHT,
                      (enum Tetromino *)&play_space, PLAY_SPACE_X, PLAY_SPACE_Y);
 
         /* Current piece */
-        draw_piece(tiles, piece);
+        draw_piece(&tiles, piece);
 
         /* Piece Preview */
-        draw_piece(tiles, (struct Piece){0, next_piece, -5, 3});
+        draw_piece(&tiles, (struct Piece){0, next_piece, -5, 3});
 
         /* Highlight CLEARED rows, and delete. */
         if (n_clears > 0) {
@@ -605,6 +606,6 @@ int main() {
   }
 
   /* Mix_FreeChunk(sound_clear); */
-  /* SDL_DestroyTexture(tiles); */
+  UnloadTexture(tiles);
   CloseWindow();
 }
