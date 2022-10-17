@@ -415,14 +415,10 @@ int main() {
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Tetris");
   SetTargetFPS(FPS);
 
-  /* Mix_Chunk *sound_clear = Mix_LoadWAV("sound/clear.wav"); */
-  /* if (sound_clear == NULL) { */
-  /*   puts("Couldn't load clear sound."); */
-  /*   exit(1); */
-  /* } */
+  InitAudioDevice();
+  Sound sound_clear = LoadSound("sound/clear.wav");
 
   Texture2D tiles = LoadTexture("art/small-tiles.png");
-  /* SDL_Texture *tiles = load_texture(ctx, "art/small-tiles.png"); */
 
   bool restart = true;
 
@@ -570,7 +566,7 @@ int main() {
           total_clears += n_clears;
           printf("Score: %d\n", score);
 
-          /* Mix_PlayChannel(-1, sound_clear, 0); */
+          PlaySound(sound_clear);
 
           Rectangle row_rect;
           row_rect.width = PLAY_SPACE_PIXEL_WIDTH;
@@ -605,7 +601,8 @@ int main() {
     WaitTime(0.5f);
   }
 
-  /* Mix_FreeChunk(sound_clear); */
+  UnloadSound(sound_clear);
   UnloadTexture(tiles);
+  CloseAudioDevice();
   CloseWindow();
 }
