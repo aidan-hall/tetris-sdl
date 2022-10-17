@@ -12,11 +12,8 @@ set(CMAKE_C_STANDARD_REQUIRED True)
 # Executable
 add_executable(Tetris tetris.c)
 
-find_package(SDL2 REQUIRED)
-target_link_libraries(Tetris PUBLIC SDL2::SDL2)
-target_link_libraries(Tetris PUBLIC SDL2_image)
-target_link_libraries(Tetris PUBLIC SDL2_ttf)
-target_link_libraries(Tetris PUBLIC SDL2_mixer)
+add_subdirectory("${CMAKE_SOURCE_DIR}/external/raylib")
+target_link_libraries(Tetris PUBLIC raylib)
 
 
 target_compile_options(Tetris PRIVATE
@@ -30,3 +27,5 @@ target_compile_options(Tetris PRIVATE
   $<$<CONFIG:RELEASE>:-Werror>
   -g
 )
+
+file(CREATE_LINK "${CMAKE_BINARY_DIR}/compile_commands.json" "${CMAKE_SOURCE_DIR}/compile_commands.json" SYMBOLIC)
